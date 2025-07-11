@@ -2,74 +2,83 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import matplotlib.pyplot as plt
-from datetime import date, timedelta
 
-# ====== CONFIGURAÇÕES DE LOGIN SIMPLES ======
-senha_correta = "agro123"
+st.title("Plataforma Agro Inteligente")
+st.write("Aqui você pode acompanhar análises de mercado, preços e previsões agrícolas usando IA.")
 
-st.set_page_config(page_title="Plataforma Agro Inteligente", layout="centered")
-st.title("🌾 Plataforma Agro Inteligente")
+# Parte 1: Entrada manual e botão para comparar soja e milho
+preco_soja = st.number_input("Digite o preço atual da soja (R$ por saca):", min_value=0.0)
+preco_milho = st.number_input("Digite o preço atual do milho (R$ por saca):", min_value=0.0)
 
-senha = st.text_input("🔐 Digite a senha para acessar:", type="password")
-
-if senha != senha_correta:
-    st.warning("Acesso restrito. Insira a senha correta.")
-    st.stop()
-
-st.success("✅ Acesso liberado!")
-
-# ====== PARTE 1 - COLETANDO DADOS ======
-st.subheader("📊 Preços Históricos - Soja e Milho")
-
-# Datas para buscar dados
-data_final = date.today()
-data_inicial = data_final - timedelta(days=180)
-
-# Dicionário de ativos
-ativos = {
-    "Soja (SOYB)": "SOYB",
-    "Milho (CORN)": "CORN"
-}
-
-# Função para carregar os dados
-@st.cache_data
-def carregar_dados(ticker):
-    dados = yf.download(ticker, start=data_inicial, end=data_final)
-    return dados["Close"]
-
-# Carregar e plotar os dados
-dados_soja = carregar_dados(ativos["Soja (SOYB)"])
-dados_milho = carregar_dados(ativos["Milho (CORN)"])
-
-# Plotando os preços
-fig, ax = plt.subplots()
-dados_soja.plot(ax=ax, label="Soja (SOYB)", color='green')
-dados_milho.plot(ax=ax, label="Milho (CORN)", color='orange')
-ax.set_title("Preços dos últimos 6 meses")
-ax.set_ylabel("Preço (USD)")
-ax.legend()
-st.pyplot(fig)
-
-# ====== PARTE 2 - ANÁLISE DE TENDÊNCIA ======
-st.subheader("🤖 Análise de Tendência")
-
-def analisar_tendencia(dados, nome):
-    variacao = dados[-1] - dados[0]
-    if variacao > 0:
-        return f"📈 Tendência de alta para {nome} (+{variacao:.2f} USD)"
-    elif variacao < 0:
-        return f"📉 Tendência de baixa para {nome} ({variacao:.2f} USD)"
+if st.button("Analisar mercado manual"):
+    if preco_soja > preco_milho:
+        st.success("A soja está com preço melhor para venda no momento.")
+    elif preco_milho > preco_soja:
+        st.success("O milho está com preço melhor para venda no momento.")
     else:
-        return f"⏸️ {nome} está estável."
+        st.info("Os preços da soja e milho estão iguais.")
 
-st.write(analisar_tendencia(dados_soja, "Soja"))
-st.write(analisar_tendencia(dados_milho, "Milho"))
+st.write("---")
 
-# ====== PARTE 3 - OPINIÃO DE VENDA SIMPLES ======
-st.subheader("📌 Recomendação Simplificada de Venda")
+# Parte 2: Análise automática com dados históricos (usando yfinance)
 
-if dados_soja[-1] > dados_milho[-1]:
-    st.info("💡 A Soja está com preço melhor atualmente.")
+# Definir códigos (tickers) do yfinance para soja e milho (exemplo)
+# Obs: nem sempre yfinance tem preços em R$ por saca, pode ser em dólar e contratos futuros
+# Aqui vamos usar códigos genéricos e converter para demonstrar — você pode ajustar depois
+codigo_soja = "ZS=F"  # Soja futuro
+codigo_milho = "ZC=F"  # Milho futuro
+
+# Baixar dados dos últimos 30 dias
+dados_soja = yf.download(codigo_soja, period="30d")
+dados_milho = yf.download(codigo_milho, period="30d")
+
+st.subheader("Análise automática com dados históricos")
+
+if dados_soja.empty or dados_milho.empty:
+    st.error("Erro ao baixar dados históricos. Tente novamente mais tarde.")
 else:
-    st.info("💡 O Milho está com preço melhor atualmente.")
+    # Mostrar gráficos dos preços de fechamento
+    fig, ax = plt.subplots(2, 1, figsize=(10,6), sharex=True)
+
+    ax[0].plot(dados_soja.index, dados_soja['Close'], label='Soja (Futuro)')
+    ax[0].set_ylabel('Preço fechamento')
+    ax[0].legend()
+    ax[0].grid(True)
+
+    ax[1].plot(dados_milho.index, dados_milho['Close'], label='Milho (Futuro)', color='orange')
+    ax[1].set_ylabel('Preço fechamento')
+    ax[1].legend()
+    ax[1].grid(True)
+
+    st.pyplot(fig)
+
+    # Cálculo simples: média móvel dos últimos 7 dias
+    media_movel_soja = dados_soja['Close'].rolling(window=7).mean().iloc[-1]
+    media_movel_milho = dados_milho['Close'].rolling(window=7).mean().iloc[-1]
+
+    st.write(f"Média móvel dos últimos 7 dias - Soja: {media_movel_soja:.2f}")
+    st.write(f"Média móvel dos últimos 7 dias - Milho: {media_movel_milho:.2f}")
+
+    # Análise simples: qual está com tendência de alta pela média móvel
+    if media_movel_soja > dados_soja['Close'].iloc[-1]:
+        tendencia_soja = "queda"
+    else:
+        tendencia_soja = "alta"
+
+    if media_movel_milho > dados_milho['Close'].iloc[-1]:
+        tendencia_milho = "queda"
+    else:
+        tendencia_milho = "alta"
+
+    st.write(f"Tendência da Soja: {tendencia_soja}")
+    st.write(f"Tendência do Milho: {tendencia_milho}")
+
+    # Recomendação final simples (exemplo)
+    if tendencia_soja == "alta" and tendencia_milho == "queda":
+        st.success("Recomendação automática: venda soja, espere o milho.")
+    elif tendencia_milho == "alta" and tendencia_soja == "queda":
+        st.success("Recomendação automática: venda milho, espere a soja.")
+    else:
+        st.info("Recomendação automática: aguarde confirmação de mercado.")
+
 
