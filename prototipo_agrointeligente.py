@@ -52,33 +52,42 @@ else:
 
     st.pyplot(fig)
 
-    # Cálculo simples: média móvel dos últimos 7 dias
-    media_movel_soja = dados_soja['Close'].rolling(window=7).mean().iloc[-1]
-    media_movel_milho = dados_milho['Close'].rolling(window=7).mean().iloc[-1]
+  import math  # coloque no topo se ainda não estiver
 
+# Cálculo simples: média móvel dos últimos 7 dias
+media_movel_soja = dados_soja['Close'].rolling(window=7).mean().iloc[-1]
+media_movel_milho = dados_milho['Close'].rolling(window=7).mean().iloc[-1]
+
+if not math.isnan(media_movel_soja):
     st.write(f"Média móvel dos últimos 7 dias - Soja: {media_movel_soja:.2f}")
+else:
+    st.write("Média móvel dos últimos 7 dias - Soja: dados insuficientes")
+
+if not math.isnan(media_movel_milho):
     st.write(f"Média móvel dos últimos 7 dias - Milho: {media_movel_milho:.2f}")
+else:
+    st.write("Média móvel dos últimos 7 dias - Milho: dados insuficientes")
 
-    # Análise simples: qual está com tendência de alta pela média móvel
-    if media_movel_soja > dados_soja['Close'].iloc[-1]:
-        tendencia_soja = "queda"
-    else:
-        tendencia_soja = "alta"
+# Análise simples: qual está com tendência de alta pela média móvel
+if not math.isnan(media_movel_soja) and media_movel_soja > dados_soja['Close'].iloc[-1]:
+    tendencia_soja = "queda"
+else:
+    tendencia_soja = "alta"
 
-    if media_movel_milho > dados_milho['Close'].iloc[-1]:
-        tendencia_milho = "queda"
-    else:
-        tendencia_milho = "alta"
+if not math.isnan(media_movel_milho) and media_movel_milho > dados_milho['Close'].iloc[-1]:
+    tendencia_milho = "queda"
+else:
+    tendencia_milho = "alta"
 
-    st.write(f"Tendência da Soja: {tendencia_soja}")
-    st.write(f"Tendência do Milho: {tendencia_milho}")
+st.write(f"Tendência da Soja: {tendencia_soja}")
+st.write(f"Tendência do Milho: {tendencia_milho}")
 
-    # Recomendação final simples (exemplo)
-    if tendencia_soja == "alta" and tendencia_milho == "queda":
-        st.success("Recomendação automática: venda soja, espere o milho.")
-    elif tendencia_milho == "alta" and tendencia_soja == "queda":
-        st.success("Recomendação automática: venda milho, espere a soja.")
-    else:
-        st.info("Recomendação automática: aguarde confirmação de mercado.")
+# Recomendação final simples (exemplo)
+if tendencia_soja == "alta" and tendencia_milho == "queda":
+    st.success("Recomendação automática: venda soja, espere o milho.")
+elif tendencia_milho == "alta" and tendencia_soja == "queda":
+    st.success("Recomendação automática: venda milho, espere a soja.")
+else:
+    st.info("Recomendação automática: aguarde confirmação de mercado.")
 
 
