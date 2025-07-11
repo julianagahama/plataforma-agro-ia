@@ -1,31 +1,75 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
+import matplotlib.pyplot as plt
+from datetime import date, timedelta
 
-st.title("Plataforma Agro Inteligente")
-st.write("Análises automáticas com dados reais.")
+# ====== CONFIGURAÇÕES DE LOGIN SIMPLES ======
+senha_correta = "agro123"
 
-# Baixar dados históricos da soja e do milho
-# Códigos do Yahoo Finance: Soja (ZS=F), Milho (ZC=F)
+st.set_page_config(page_title="Plataforma Agro Inteligente", layout="centered")
+st.title("🌾 Plataforma Agro Inteligente")
 
-preco_soja_df = yf.download('ZS=F', period='1mo', interval='1d')
-preco_milho_df = yf.download('ZC=F', period='1mo', interval='1d')
+senha = st.text_input("🔐 Digite a senha para acessar:", type="password")
 
-st.write("Preços históricos soja (último mês):")
-st.dataframe(preco_soja_df[['Close']])
+if senha != senha_correta:
+    st.warning("Acesso restrito. Insira a senha correta.")
+    st.stop()
 
-st.write("Preços históricos milho (último mês):")
-st.dataframe(preco_milho_df[['Close']])
+st.success("✅ Acesso liberado!")
 
-# Mostrar último preço de fechamento
-ultimo_preco_soja = preco_soja_df['Close'][-1]
-ultimo_preco_milho = preco_milho_df['Close'][-1]
+# ====== PARTE 1 - COLETANDO DADOS ======
+st.subheader("📊 Preços Históricos - Soja e Milho")
 
-st.write(f"Último preço soja: R$ {ultimo_preco_soja:.2f}")
-st.write(f"Último preço milho: R$ {ultimo_preco_milho:.2f}")
+# Datas para buscar dados
+data_final = date.today()
+data_inicial = data_final - timedelta(days=180)
 
-# Análise simples
-if ultimo_preco_soja > ultimo_preco_milho:
-    st.success("Soja está com preço melhor para venda no momento.")
+# Dicionário de ativos
+ativos = {
+    "Soja (SOYB)": "SOYB",
+    "Milho (CORN)": "CORN"
+}
+
+# Função para carregar os dados
+@st.cache_data
+def carregar_dados(ticker):
+    dados = yf.download(ticker, start=data_inicial, end=data_final)
+    return dados["Close"]
+
+# Carregar e plotar os dados
+dados_soja = carregar_dados(ativos["Soja (SOYB)"])
+dados_milho = carregar_dados(ativos["Milho (CORN)"])
+
+# Plotando os preços
+fig, ax = plt.subplots()
+dados_soja.plot(ax=ax, label="Soja (SOYB)", color='green')
+dados_milho.plot(ax=ax, label="Milho (CORN)", color='orange')
+ax.set_title("Preços dos últimos 6 meses")
+ax.set_ylabel("Preço (USD)")
+ax.legend()
+st.pyplot(fig)
+
+# ====== PARTE 2 - ANÁLISE DE TENDÊNCIA ======
+st.subheader("🤖 Análise de Tendência")
+
+def analisar_tendencia(dados, nome):
+    variacao = dados[-1] - dados[0]
+    if variacao > 0:
+        return f"📈 Tendência de alta para {nome} (+{variacao:.2f} USD)"
+    elif variacao < 0:
+        return f"📉 Tendência de baixa para {nome} ({variacao:.2f} USD)"
+    else:
+        return f"⏸️ {nome} está estável."
+
+st.write(analisar_tendencia(dados_soja, "Soja"))
+st.write(analisar_tendencia(dados_milho, "Milho"))
+
+# ====== PARTE 3 - OPINIÃO DE VENDA SIMPLES ======
+st.subheader("📌 Recomendação Simplificada de Venda")
+
+if dados_soja[-1] > dados_milho[-1]:
+    st.info("💡 A Soja está com preço melhor atualmente.")
 else:
-    st.success("Milho está com preço melhor para venda no momento.")
+    st.info("💡 O Milho está com preço melhor atualmente.")
+
