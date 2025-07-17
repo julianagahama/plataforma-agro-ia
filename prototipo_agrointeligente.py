@@ -2,19 +2,15 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import matplotlib.pyplot as plt
-import time
 import requests
-
-# --- Configurações iniciais ---
-st.set_page_config(page_title="Plataforma Agro Inteligente", layout="centered")
+import time
 
 st.title("Plataforma Agro Inteligente")
-st.write("Acompanhe análises de mercado, clima e recomendações agrícolas usando IA.")
+st.write("Aqui você pode acompanhar análises de mercado, preços, clima e previsões agrícolas usando IA.")
 
-# --- Parte 1: Entrada manual ---
-st.header("Comparativo Manual de Preços")
-preco_soja = st.number_input("Digite o preço atual da soja (R$ por saca):", min_value=0.0)
-preco_milho = st.number_input("Digite o preço atual do milho (R$ por saca):", min_value=0.0)
+# Parte 1: Entrada manual e botão para comparar soja e milho
+preco_soja = st.number_input("Digite o preço atual da soja (R$ por saca):", min_value=0.0, format="%.2f")
+preco_milho = st.number_input("Digite o preço atual do milho (R$ por saca):", min_value=0.0, format="%.2f")
 
 if st.button("Analisar mercado manual"):
     if preco_soja > preco_milho:
@@ -24,44 +20,31 @@ if st.button("Analisar mercado manual"):
     else:
         st.info("Os preços da soja e milho estão iguais.")
 
-# --- Parte 2: Clima por cidade ---
-st.header("Clima na sua Região")
-cidade = st.text_input("Digite o nome da sua cidade:")
+st.write("---")
 
-if cidade:
-    chave_api = "4fb243378fa31424203528547e3c3f3a"
-    url = f"https://api.openweathermap.org/data/2.5/weather?q={cidade}&appid={chave_api}&lang=pt_br&units=metric"
-    resposta = requests.get(url)
+# Parte 2: Análise automática com dados históricos (usando yfinance)
 
-    if resposta.status_code == 200:
-        dados_clima = resposta.json()
-        clima = dados_clima['weather'][0]['description'].capitalize()
-        temp = dados_clima['main']['temp']
-        umidade = dados_clima['main']['humidity']
-        st.write(f"**Condição atual:** {clima}")
-        st.write(f"**Temperatura:** {temp} °C")
-        st.write(f"**Umidade:** {umidade}%")
-    else:
-        st.warning("Não foi possível obter informações climáticas.")
-
-# --- Parte 3: Análise automática de mercado ---
-st.header("Análise Automática de Mercado")
-
-codigo_soja = "ZS=F"
-codigo_milho = "ZC=F"
+codigo_soja = "ZS=F"  # Soja futuro
+codigo_milho = "ZC=F"  # Milho futuro
 
 def baixar_dados(ticker, periodo="90d", tentativas=3):
     for tentativa in range(tentativas):
         try:
             dados = yf.download(ticker, period=periodo, auto_adjust=True)
             if not dados.empty:
-                return dados.interpolate(method='linear').ffill().bfill()
-        except:
-            time.sleep(2)
+                dados = dados.interpolate(method='linear').ffill().bfill()
+                return dados
+        except Exception:
+            if tentativa < tentativas - 1:
+                time.sleep(2)
+            else:
+                return pd.DataFrame()
     return pd.DataFrame()
 
 dados_soja = baixar_dados(codigo_soja)
 dados_milho = baixar_dados(codigo_milho)
+
+st.subheader("Análise automática com dados históricos")
 
 if dados_soja.empty or dados_milho.empty:
     st.error("Erro ao baixar dados históricos. Tente novamente mais tarde.")
@@ -69,56 +52,108 @@ else:
     fig, ax = plt.subplots(2, 1, figsize=(10,6), sharex=True)
 
     ax[0].plot(dados_soja.index, dados_soja['Close'], label='Soja (Futuro)')
-    ax[0].set_ylabel('Preço Fechamento')
+    ax[0].set_ylabel('Preço fechamento')
     ax[0].legend()
     ax[0].grid(True)
 
     ax[1].plot(dados_milho.index, dados_milho['Close'], label='Milho (Futuro)', color='orange')
-    ax[1].set_ylabel('Preço Fechamento')
+    ax[1].set_ylabel('Preço fechamento')
     ax[1].legend()
     ax[1].grid(True)
 
     st.pyplot(fig)
 
-    # Médias móveis
-    soja_close = dados_soja['Close']
-    milho_close = dados_milho['Close']
+    # Média móvel protegida
+    media_movel_soja = None
+    media_movel_milho = None
 
-    if len(soja_close) >= 7:
-        media_soja = soja_close.rolling(window=7).mean().iloc[-1]
-        st.write(f"Média móvel dos últimos 7 dias - Soja: {media_soja:.2f}")
+    try:
+        media_movel_soja = dados_soja['Close'].rolling(window=7).mean().iloc[-1]
+    except Exception:
+        pass
+
+    try:
+        media_movel_milho = dados_milho['Close'].rolling(window=7).mean().iloc[-1]
+    except Exception:
+        pass
+
+    if media_movel_soja is not None and pd.notna(media_movel_soja):
+        st.write(f"Média móvel dos últimos 7 dias - Soja: {media_movel_soja:.2f}")
     else:
-        media_soja = None
-        st.warning("Dados insuficientes para média móvel da soja.")
+        st.warning("Não foi possível calcular a média móvel para soja.")
 
-    if len(milho_close) >= 7:
-        media_milho = milho_close.rolling(window=7).mean().iloc[-1]
-        st.write(f"Média móvel dos últimos 7 dias - Milho: {media_milho:.2f}")
+    if media_movel_milho is not None and pd.notna(media_movel_milho):
+        st.write(f"Média móvel dos últimos 7 dias - Milho: {media_movel_milho:.2f}")
     else:
-        media_milho = None
-        st.warning("Dados insuficientes para média móvel do milho.")
+        st.warning("Não foi possível calcular a média móvel para milho.")
 
-    # Tendência
-    if media_soja is not None:
-        tendencia_soja = "alta" if media_soja <= soja_close.iloc[-1] else "queda"
-        st.write(f"Tendência da Soja: {tendencia_soja}")
-    else:
-        tendencia_soja = "indefinida"
+    # Análise de tendência simples, só se médias existirem
+    tendencia_soja = "indefinida"
+    tendencia_milho = "indefinida"
 
-    if media_milho is not None:
-        tendencia_milho = "alta" if media_milho <= milho_close.iloc[-1] else "queda"
-        st.write(f"Tendência do Milho: {tendencia_milho}")
-    else:
-        tendencia_milho = "indefinida"
+    if media_movel_soja is not None and pd.notna(media_movel_soja) and not dados_soja['Close'].empty:
+        try:
+            if media_movel_soja > dados_soja['Close'].iloc[-1]:
+                tendencia_soja = "queda"
+            else:
+                tendencia_soja = "alta"
+        except Exception:
+            tendencia_soja = "indefinida"
 
-    # Recomendação
-    st.subheader("Recomendação Automática")
+    if media_movel_milho is not None and pd.notna(media_movel_milho) and not dados_milho['Close'].empty:
+        try:
+            if media_movel_milho > dados_milho['Close'].iloc[-1]:
+                tendencia_milho = "queda"
+            else:
+                tendencia_milho = "alta"
+        except Exception:
+            tendencia_milho = "indefinida"
+
+    st.write(f"Tendência da Soja: {tendencia_soja}")
+    st.write(f"Tendência do Milho: {tendencia_milho}")
+
+    # Recomendação final simples
     if tendencia_soja == "alta" and tendencia_milho == "queda":
-        st.success("Recomendação: venda soja, espere o milho.")
+        st.success("Recomendação automática: venda soja, espere o milho.")
     elif tendencia_milho == "alta" and tendencia_soja == "queda":
-        st.success("Recomendação: venda milho, espere a soja.")
+        st.success("Recomendação automática: venda milho, espere a soja.")
     elif "indefinida" in (tendencia_soja, tendencia_milho):
-        st.info("Dados insuficientes para recomendação precisa.")
+        st.info("Recomendação automática: dados insuficientes para análise.")
     else:
-        st.info("Aguarde confirmação de tendências para melhor decisão.")
+        st.info("Recomendação automática: aguarde confirmação de mercado.")
+
+st.write("---")
+
+# Parte 3: Consulta do clima via OpenWeather API
+
+def obter_clima(cidade, chave_api):
+    url = f"http://api.openweathermap.org/data/2.5/weather?q={cidade}&appid={chave_api}&units=metric&lang=pt_br"
+    try:
+        resposta = requests.get(url, timeout=10)
+        resposta.raise_for_status()  # Lança erro para códigos HTTP ruins
+        dados = resposta.json()
+
+        if dados.get("cod") != 200:
+            return None, f"Erro da API: {dados.get('message', 'Cidade não encontrada')}"
+
+        temp = dados['main']['temp']
+        descricao = dados['weather'][0]['description']
+        return f"{temp}ºC, {descricao}", None
+    except requests.exceptions.RequestException as e:
+        return None, f"Erro ao conectar à API do clima: {str(e)}"
+
+st.subheader("Consulta do Clima")
+
+cidade_usuario = st.text_input("Digite a cidade para ver o clima:")
+
+sua_chave_api = "4fb243378fa31424203528547e3c3f3a"  # sua chave
+
+if cidade_usuario:
+    clima, erro = obter_clima(cidade_usuario, sua_chave_api)
+    if erro:
+        st.error(f"Não foi possível obter informações climáticas: {erro}")
+    else:
+        st.write(f"Clima atual em {cidade_usuario}: {clima}")
+
+# --- Aqui pode vir a parte para notícias (quando quiser implementar) ---
 
