@@ -2,90 +2,123 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import matplotlib.pyplot as plt
+import time
+import requests
 
-st.set_page_config(page_title="Agro Inteligente", layout="centered")
-st.title("🌾 Plataforma Agro Inteligente")
-st.write("Acompanhe os preços da soja e do milho com análises automáticas.")
+# --- Configurações iniciais ---
+st.set_page_config(page_title="Plataforma Agro Inteligente", layout="centered")
 
-# Entrada manual
-preco_soja = st.number_input("Digite o preço atual da soja (R$/saca):", min_value=0.0)
-preco_milho = st.number_input("Digite o preço atual do milho (R$/saca):", min_value=0.0)
+st.title("Plataforma Agro Inteligente")
+st.write("Acompanhe análises de mercado, clima e recomendações agrícolas usando IA.")
 
-if st.button("Comparar preços"):
+# --- Parte 1: Entrada manual ---
+st.header("Comparativo Manual de Preços")
+preco_soja = st.number_input("Digite o preço atual da soja (R$ por saca):", min_value=0.0)
+preco_milho = st.number_input("Digite o preço atual do milho (R$ por saca):", min_value=0.0)
+
+if st.button("Analisar mercado manual"):
     if preco_soja > preco_milho:
-        st.success("📈 Soja está mais valorizada.")
+        st.success("A soja está com preço melhor para venda no momento.")
     elif preco_milho > preco_soja:
-        st.success("📈 Milho está mais valorizado.")
+        st.success("O milho está com preço melhor para venda no momento.")
     else:
-        st.info("🔍 Os dois estão com o mesmo valor.")
+        st.info("Os preços da soja e milho estão iguais.")
 
-st.write("---")
+# --- Parte 2: Clima por cidade ---
+st.header("Clima na sua Região")
+cidade = st.text_input("Digite o nome da sua cidade:")
 
-# Baixar dados
-def carregar_dados(ticker):
-    try:
-        df = yf.download(ticker, period="90d", progress=False)
-        if not df.empty:
-            df = df.interpolate(method="linear").ffill().bfill()
-        return df
-    except:
-        return pd.DataFrame()
+if cidade:
+    chave_api = "4fb243378fa31424203528547e3c3f3a"
+    url = f"https://api.openweathermap.org/data/2.5/weather?q={cidade}&appid={chave_api}&lang=pt_br&units=metric"
+    resposta = requests.get(url)
 
-df_soja = carregar_dados("ZS=F")
-df_milho = carregar_dados("ZC=F")
+    if resposta.status_code == 200:
+        dados_clima = resposta.json()
+        clima = dados_clima['weather'][0]['description'].capitalize()
+        temp = dados_clima['main']['temp']
+        umidade = dados_clima['main']['humidity']
+        st.write(f"**Condição atual:** {clima}")
+        st.write(f"**Temperatura:** {temp} °C")
+        st.write(f"**Umidade:** {umidade}%")
+    else:
+        st.warning("Não foi possível obter informações climáticas.")
 
-# Verificar se os dados foram carregados
-if df_soja.empty or df_milho.empty:
-    st.error("Erro ao carregar dados de mercado. Tente novamente mais tarde.")
+# --- Parte 3: Análise automática de mercado ---
+st.header("Análise Automática de Mercado")
+
+codigo_soja = "ZS=F"
+codigo_milho = "ZC=F"
+
+def baixar_dados(ticker, periodo="90d", tentativas=3):
+    for tentativa in range(tentativas):
+        try:
+            dados = yf.download(ticker, period=periodo, auto_adjust=True)
+            if not dados.empty:
+                return dados.interpolate(method='linear').ffill().bfill()
+        except:
+            time.sleep(2)
+    return pd.DataFrame()
+
+dados_soja = baixar_dados(codigo_soja)
+dados_milho = baixar_dados(codigo_milho)
+
+if dados_soja.empty or dados_milho.empty:
+    st.error("Erro ao baixar dados históricos. Tente novamente mais tarde.")
 else:
-    # Gráfico
-    fig, ax = plt.subplots(2, 1, figsize=(10, 6), sharex=True)
-    ax[0].plot(df_soja.index, df_soja["Close"], label="Soja")
-    ax[1].plot(df_milho.index, df_milho["Close"], label="Milho", color="orange")
-    ax[0].legend(); ax[1].legend()
-    ax[0].grid(); ax[1].grid()
+    fig, ax = plt.subplots(2, 1, figsize=(10,6), sharex=True)
+
+    ax[0].plot(dados_soja.index, dados_soja['Close'], label='Soja (Futuro)')
+    ax[0].set_ylabel('Preço Fechamento')
+    ax[0].legend()
+    ax[0].grid(True)
+
+    ax[1].plot(dados_milho.index, dados_milho['Close'], label='Milho (Futuro)', color='orange')
+    ax[1].set_ylabel('Preço Fechamento')
+    ax[1].legend()
+    ax[1].grid(True)
+
     st.pyplot(fig)
 
     # Médias móveis
-    def calcular_media_movel(df):
-        if df.shape[0] >= 7:
-            return df['Close'].rolling(window=7).mean().iloc[-1]
-        return None
+    soja_close = dados_soja['Close']
+    milho_close = dados_milho['Close']
 
-    media_soja = calcular_media_movel(df_soja)
-    media_milho = calcular_media_movel(df_milho)
-    preco_atual_soja = df_soja['Close'].iloc[-1]
-    preco_atual_milho = df_milho['Close'].iloc[-1]
-
-    if media_soja:
-        st.write(f"Média móvel 7 dias (Soja): R$ {media_soja:.2f}")
+    if len(soja_close) >= 7:
+        media_soja = soja_close.rolling(window=7).mean().iloc[-1]
+        st.write(f"Média móvel dos últimos 7 dias - Soja: {media_soja:.2f}")
     else:
-        st.warning("Sem dados suficientes para calcular a média da soja.")
+        media_soja = None
+        st.warning("Dados insuficientes para média móvel da soja.")
 
-    if media_milho:
-        st.write(f"Média móvel 7 dias (Milho): R$ {media_milho:.2f}")
+    if len(milho_close) >= 7:
+        media_milho = milho_close.rolling(window=7).mean().iloc[-1]
+        st.write(f"Média móvel dos últimos 7 dias - Milho: {media_milho:.2f}")
     else:
-        st.warning("Sem dados suficientes para calcular a média do milho.")
+        media_milho = None
+        st.warning("Dados insuficientes para média móvel do milho.")
 
     # Tendência
-    def tendencia(preco_atual, media):
-        if media and preco_atual:
-            return "alta" if preco_atual > media else "queda"
-        return "indefinida"
+    if media_soja is not None:
+        tendencia_soja = "alta" if media_soja <= soja_close.iloc[-1] else "queda"
+        st.write(f"Tendência da Soja: {tendencia_soja}")
+    else:
+        tendencia_soja = "indefinida"
 
-    tendencia_soja = tendencia(preco_atual_soja, media_soja)
-    tendencia_milho = tendencia(preco_atual_milho, media_milho)
-
-    st.write(f"Tendência Soja: {tendencia_soja}")
-    st.write(f"Tendência Milho: {tendencia_milho}")
+    if media_milho is not None:
+        tendencia_milho = "alta" if media_milho <= milho_close.iloc[-1] else "queda"
+        st.write(f"Tendência do Milho: {tendencia_milho}")
+    else:
+        tendencia_milho = "indefinida"
 
     # Recomendação
+    st.subheader("Recomendação Automática")
     if tendencia_soja == "alta" and tendencia_milho == "queda":
-        st.success("✅ Recomendação: Venda soja, espere o milho.")
+        st.success("Recomendação: venda soja, espere o milho.")
     elif tendencia_milho == "alta" and tendencia_soja == "queda":
-        st.success("✅ Recomendação: Venda milho, espere a soja.")
+        st.success("Recomendação: venda milho, espere a soja.")
     elif "indefinida" in (tendencia_soja, tendencia_milho):
-        st.info("ℹ️ Dados insuficientes para recomendação.")
+        st.info("Dados insuficientes para recomendação precisa.")
     else:
-        st.info("ℹ️ Aguarde movimentação mais clara do mercado.")
+        st.info("Aguarde confirmação de tendências para melhor decisão.")
 
