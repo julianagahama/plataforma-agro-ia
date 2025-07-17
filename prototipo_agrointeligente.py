@@ -155,5 +155,4 @@ if cidade_usuario:
     else:
         st.write(f"Clima atual em {cidade_usuario}: {clima}")
 
-# --- Aqui pode vir a parte para notícias (quando quiser implementar) ---
 
