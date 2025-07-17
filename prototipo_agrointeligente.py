@@ -7,7 +7,7 @@ import time
 st.title("Plataforma Agro Inteligente")
 st.write("Aqui você pode acompanhar análises de mercado, preços e previsões agrícolas usando IA.")
 
-# Parte 1: Entrada manual e botão para comparar soja e milho
+# Parte 1: Entrada manual
 preco_soja = st.number_input("Digite o preço atual da soja (R$ por saca):", min_value=0.0)
 preco_milho = st.number_input("Digite o preço atual do milho (R$ por saca):", min_value=0.0)
 
@@ -21,10 +21,9 @@ if st.button("Analisar mercado manual"):
 
 st.write("---")
 
-# Parte 2: Análise automática com dados históricos (usando yfinance)
-
-codigo_soja = "ZS=F"  # Soja futuro
-codigo_milho = "ZC=F"  # Milho futuro
+# Parte 2: Dados históricos com yfinance
+codigo_soja = "ZS=F"
+codigo_milho = "ZC=F"
 
 def baixar_dados(ticker, periodo="90d", tentativas=3):
     for tentativa in range(tentativas):
@@ -36,8 +35,6 @@ def baixar_dados(ticker, periodo="90d", tentativas=3):
         except Exception:
             if tentativa < tentativas - 1:
                 time.sleep(2)
-            else:
-                return pd.DataFrame()
     return pd.DataFrame()
 
 dados_soja = baixar_dados(codigo_soja)
@@ -62,41 +59,41 @@ else:
 
     st.pyplot(fig)
 
-    # Cálculo da média móvel protegido
+    # Média móvel com tratamento seguro
     media_movel_soja = None
     media_movel_milho = None
 
     try:
-        media_movel_soja = dados_soja['Close'].rolling(window=7).mean().iloc[-1]
-    except Exception:
+        media_movel_soja = float(dados_soja['Close'].rolling(window=7).mean().iloc[-1])
+    except:
         pass
 
     try:
-        media_movel_milho = dados_milho['Close'].rolling(window=7).mean().iloc[-1]
-    except Exception:
+        media_movel_milho = float(dados_milho['Close'].rolling(window=7).mean().iloc[-1])
+    except:
         pass
 
-    if media_movel_soja is not None and pd.notna(media_movel_soja):
+    if isinstance(media_movel_soja, (int, float)) and not pd.isna(media_movel_soja):
         st.write(f"Média móvel dos últimos 7 dias - Soja: {media_movel_soja:.2f}")
     else:
         st.warning("Não foi possível calcular a média móvel para soja.")
 
-    if media_movel_milho is not None and pd.notna(media_movel_milho):
+    if isinstance(media_movel_milho, (int, float)) and not pd.isna(media_movel_milho):
         st.write(f"Média móvel dos últimos 7 dias - Milho: {media_movel_milho:.2f}")
     else:
         st.warning("Não foi possível calcular a média móvel para milho.")
 
-    # Análise de tendência simples, só se as médias existirem e não forem NaN
+    # Tendência
     tendencia_soja = "indefinida"
     tendencia_milho = "indefinida"
 
-    if media_movel_soja is not None and pd.notna(media_movel_soja) and not dados_soja['Close'].empty:
+    if isinstance(media_movel_soja, (int, float)) and not pd.isna(media_movel_soja):
         if media_movel_soja > dados_soja['Close'].iloc[-1]:
             tendencia_soja = "queda"
         else:
             tendencia_soja = "alta"
 
-    if media_movel_milho is not None and pd.notna(media_movel_milho) and not dados_milho['Close'].empty:
+    if isinstance(media_movel_milho, (int, float)) and not pd.isna(media_movel_milho):
         if media_movel_milho > dados_milho['Close'].iloc[-1]:
             tendencia_milho = "queda"
         else:
@@ -105,12 +102,14 @@ else:
     st.write(f"Tendência da Soja: {tendencia_soja}")
     st.write(f"Tendência do Milho: {tendencia_milho}")
 
-    # Recomendação final simples
+    # Recomendação
     if tendencia_soja == "alta" and tendencia_milho == "queda":
         st.success("Recomendação automática: venda soja, espere o milho.")
     elif tendencia_milho == "alta" and tendencia_soja == "queda":
         st.success("Recomendação automática: venda milho, espere a soja.")
     elif "indefinida" in (tendencia_soja, tendencia_milho):
         st.info("Recomendação automática: dados insuficientes para análise.")
+    elif tendencia_soja == tendencia_milho:
+        st.info(f"Recomendação automática: ambos em tendência de {tendencia_soja}. Avalie o mercado com cautela.")
     else:
         st.info("Recomendação automática: aguarde confirmação de mercado.")
