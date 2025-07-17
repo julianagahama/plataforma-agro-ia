@@ -63,42 +63,44 @@ else:
     st.pyplot(fig)
 
     # Cálculo da média móvel protegido
+    media_movel_soja = None
+    media_movel_milho = None
+
     try:
         media_movel_soja = dados_soja['Close'].rolling(window=7).mean().iloc[-1]
     except Exception:
-        media_movel_soja = None
+        pass
 
     try:
         media_movel_milho = dados_milho['Close'].rolling(window=7).mean().iloc[-1]
     except Exception:
-        media_movel_milho = None
+        pass
 
-    if media_movel_soja is not None:
+    if media_movel_soja is not None and pd.notna(media_movel_soja):
         st.write(f"Média móvel dos últimos 7 dias - Soja: {media_movel_soja:.2f}")
     else:
         st.warning("Não foi possível calcular a média móvel para soja.")
 
-    if media_movel_milho is not None:
+    if media_movel_milho is not None and pd.notna(media_movel_milho):
         st.write(f"Média móvel dos últimos 7 dias - Milho: {media_movel_milho:.2f}")
     else:
         st.warning("Não foi possível calcular a média móvel para milho.")
 
-    # Análise de tendência simples, só se as médias existirem
-    if media_movel_soja is not None and not dados_soja['Close'].empty:
+    # Análise de tendência simples, só se as médias existirem e não forem NaN
+    tendencia_soja = "indefinida"
+    tendencia_milho = "indefinida"
+
+    if media_movel_soja is not None and pd.notna(media_movel_soja) and not dados_soja['Close'].empty:
         if media_movel_soja > dados_soja['Close'].iloc[-1]:
             tendencia_soja = "queda"
         else:
             tendencia_soja = "alta"
-    else:
-        tendencia_soja = "indefinida"
 
-    if media_movel_milho is not None and not dados_milho['Close'].empty:
+    if media_movel_milho is not None and pd.notna(media_movel_milho) and not dados_milho['Close'].empty:
         if media_movel_milho > dados_milho['Close'].iloc[-1]:
             tendencia_milho = "queda"
         else:
             tendencia_milho = "alta"
-    else:
-        tendencia_milho = "indefinida"
 
     st.write(f"Tendência da Soja: {tendencia_soja}")
     st.write(f"Tendência do Milho: {tendencia_milho}")
@@ -108,8 +110,7 @@ else:
         st.success("Recomendação automática: venda soja, espere o milho.")
     elif tendencia_milho == "alta" and tendencia_soja == "queda":
         st.success("Recomendação automática: venda milho, espere a soja.")
-    elif tendencia_soja == "indefinida" or tendencia_milho == "indefinida":
+    elif "indefinida" in (tendencia_soja, tendencia_milho):
         st.info("Recomendação automática: dados insuficientes para análise.")
     else:
         st.info("Recomendação automática: aguarde confirmação de mercado.")
-
