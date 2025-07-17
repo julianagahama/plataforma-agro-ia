@@ -2,6 +2,7 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import matplotlib.pyplot as plt
+import time
 
 st.title("Plataforma Agro Inteligente")
 st.write("Aqui você pode acompanhar análises de mercado, preços e previsões agrícolas usando IA.")
@@ -25,8 +26,22 @@ st.write("---")
 codigo_soja = "ZS=F"  # Soja futuro
 codigo_milho = "ZC=F"  # Milho futuro
 
-dados_soja = yf.download(codigo_soja, period="60d")
-dados_milho = yf.download(codigo_milho, period="60d")
+def baixar_dados(ticker, periodo="90d", tentativas=3):
+    for tentativa in range(tentativas):
+        try:
+            dados = yf.download(ticker, period=periodo, auto_adjust=True)
+            if not dados.empty:
+                dados = dados.interpolate(method='linear').ffill().bfill()
+                return dados
+        except Exception:
+            if tentativa < tentativas - 1:
+                time.sleep(2)
+            else:
+                return pd.DataFrame()
+    return pd.DataFrame()
+
+dados_soja = baixar_dados(codigo_soja)
+dados_milho = baixar_dados(codigo_milho)
 
 st.subheader("Análise automática com dados históricos")
 
@@ -47,47 +62,54 @@ else:
 
     st.pyplot(fig)
 
-    # Cálculo seguro da média móvel dos últimos 7 dias
+    # Cálculo da média móvel protegido
     try:
         media_movel_soja = dados_soja['Close'].rolling(window=7).mean().iloc[-1]
-        st.write(f"Média móvel dos últimos 7 dias - Soja: {media_movel_soja:.2f}")
     except Exception:
         media_movel_soja = None
-        st.warning("Não foi possível calcular a média móvel da soja por dados insuficientes.")
 
     try:
         media_movel_milho = dados_milho['Close'].rolling(window=7).mean().iloc[-1]
-        st.write(f"Média móvel dos últimos 7 dias - Milho: {media_movel_milho:.2f}")
     except Exception:
         media_movel_milho = None
-        st.warning("Não foi possível calcular a média móvel do milho por dados insuficientes.")
 
-    # Análise simples de tendência com base na média móvel
     if media_movel_soja is not None:
+        st.write(f"Média móvel dos últimos 7 dias - Soja: {media_movel_soja:.2f}")
+    else:
+        st.warning("Não foi possível calcular a média móvel para soja.")
+
+    if media_movel_milho is not None:
+        st.write(f"Média móvel dos últimos 7 dias - Milho: {media_movel_milho:.2f}")
+    else:
+        st.warning("Não foi possível calcular a média móvel para milho.")
+
+    # Análise de tendência simples, só se as médias existirem
+    if media_movel_soja is not None and not dados_soja['Close'].empty:
         if media_movel_soja > dados_soja['Close'].iloc[-1]:
             tendencia_soja = "queda"
         else:
             tendencia_soja = "alta"
-        st.write(f"Tendência da Soja: {tendencia_soja}")
     else:
-        tendencia_soja = None
+        tendencia_soja = "indefinida"
 
-    if media_movel_milho is not None:
+    if media_movel_milho is not None and not dados_milho['Close'].empty:
         if media_movel_milho > dados_milho['Close'].iloc[-1]:
             tendencia_milho = "queda"
         else:
             tendencia_milho = "alta"
-        st.write(f"Tendência do Milho: {tendencia_milho}")
     else:
-        tendencia_milho = None
+        tendencia_milho = "indefinida"
 
-    # Recomendação automática com base nas tendências
+    st.write(f"Tendência da Soja: {tendencia_soja}")
+    st.write(f"Tendência do Milho: {tendencia_milho}")
+
+    # Recomendação final simples
     if tendencia_soja == "alta" and tendencia_milho == "queda":
         st.success("Recomendação automática: venda soja, espere o milho.")
     elif tendencia_milho == "alta" and tendencia_soja == "queda":
         st.success("Recomendação automática: venda milho, espere a soja.")
-    elif tendencia_soja is None or tendencia_milho is None:
-        st.info("Recomendação automática indisponível por dados insuficientes.")
+    elif tendencia_soja == "indefinida" or tendencia_milho == "indefinida":
+        st.info("Recomendação automática: dados insuficientes para análise.")
     else:
         st.info("Recomendação automática: aguarde confirmação de mercado.")
 
