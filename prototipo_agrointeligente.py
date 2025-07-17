@@ -7,7 +7,7 @@ import time
 st.title("Plataforma Agro Inteligente")
 st.write("Aqui você pode acompanhar análises de mercado, preços e previsões agrícolas usando IA.")
 
-# Parte 1: Entrada manual
+# Parte 1: Entrada manual e botão para comparar soja e milho
 preco_soja = st.number_input("Digite o preço atual da soja (R$ por saca):", min_value=0.0)
 preco_milho = st.number_input("Digite o preço atual do milho (R$ por saca):", min_value=0.0)
 
@@ -21,9 +21,9 @@ if st.button("Analisar mercado manual"):
 
 st.write("---")
 
-# Parte 2: Dados históricos com yfinance
-codigo_soja = "ZS=F"
-codigo_milho = "ZC=F"
+# Parte 2: Análise automática com dados históricos
+codigo_soja = "ZS=F"  # Soja futuro
+codigo_milho = "ZC=F"  # Milho futuro
 
 def baixar_dados(ticker, periodo="90d", tentativas=3):
     for tentativa in range(tentativas):
@@ -35,6 +35,8 @@ def baixar_dados(ticker, periodo="90d", tentativas=3):
         except Exception:
             if tentativa < tentativas - 1:
                 time.sleep(2)
+            else:
+                return pd.DataFrame()
     return pd.DataFrame()
 
 dados_soja = baixar_dados(codigo_soja)
@@ -45,6 +47,7 @@ st.subheader("Análise automática com dados históricos")
 if dados_soja.empty or dados_milho.empty:
     st.error("Erro ao baixar dados históricos. Tente novamente mais tarde.")
 else:
+    # Gráficos
     fig, ax = plt.subplots(2, 1, figsize=(10,6), sharex=True)
 
     ax[0].plot(dados_soja.index, dados_soja['Close'], label='Soja (Futuro)')
@@ -59,42 +62,44 @@ else:
 
     st.pyplot(fig)
 
-    # Média móvel com tratamento seguro
+    # Médias móveis com proteção
     media_movel_soja = None
     media_movel_milho = None
 
     try:
-        media_movel_soja = float(dados_soja['Close'].rolling(window=7).mean().iloc[-1])
-    except:
+        media_movel_soja = dados_soja['Close'].rolling(window=7).mean().iloc[-1]
+    except Exception:
         pass
 
     try:
-        media_movel_milho = float(dados_milho['Close'].rolling(window=7).mean().iloc[-1])
-    except:
+        media_movel_milho = dados_milho['Close'].rolling(window=7).mean().iloc[-1]
+    except Exception:
         pass
 
-    if isinstance(media_movel_soja, (int, float)) and not pd.isna(media_movel_soja):
+    if media_movel_soja is not None and pd.notna(media_movel_soja):
         st.write(f"Média móvel dos últimos 7 dias - Soja: {media_movel_soja:.2f}")
     else:
         st.warning("Não foi possível calcular a média móvel para soja.")
 
-    if isinstance(media_movel_milho, (int, float)) and not pd.isna(media_movel_milho):
+    if media_movel_milho is not None and pd.notna(media_movel_milho):
         st.write(f"Média móvel dos últimos 7 dias - Milho: {media_movel_milho:.2f}")
     else:
         st.warning("Não foi possível calcular a média móvel para milho.")
 
-    # Tendência
+    # Tendência protegida
     tendencia_soja = "indefinida"
     tendencia_milho = "indefinida"
 
-    if isinstance(media_movel_soja, (int, float)) and not pd.isna(media_movel_soja):
-        if media_movel_soja > dados_soja['Close'].iloc[-1]:
+    ultimo_preco_soja = dados_soja['Close'].iloc[-1] if not dados_soja['Close'].empty else None
+    if media_movel_soja is not None and pd.notna(media_movel_soja) and ultimo_preco_soja is not None and pd.notna(ultimo_preco_soja):
+        if media_movel_soja > ultimo_preco_soja:
             tendencia_soja = "queda"
         else:
             tendencia_soja = "alta"
 
-    if isinstance(media_movel_milho, (int, float)) and not pd.isna(media_movel_milho):
-        if media_movel_milho > dados_milho['Close'].iloc[-1]:
+    ultimo_preco_milho = dados_milho['Close'].iloc[-1] if not dados_milho['Close'].empty else None
+    if media_movel_milho is not None and pd.notna(media_movel_milho) and ultimo_preco_milho is not None and pd.notna(ultimo_preco_milho):
+        if media_movel_milho > ultimo_preco_milho:
             tendencia_milho = "queda"
         else:
             tendencia_milho = "alta"
@@ -102,14 +107,12 @@ else:
     st.write(f"Tendência da Soja: {tendencia_soja}")
     st.write(f"Tendência do Milho: {tendencia_milho}")
 
-    # Recomendação
+    # Recomendação automática
     if tendencia_soja == "alta" and tendencia_milho == "queda":
         st.success("Recomendação automática: venda soja, espere o milho.")
     elif tendencia_milho == "alta" and tendencia_soja == "queda":
         st.success("Recomendação automática: venda milho, espere a soja.")
     elif "indefinida" in (tendencia_soja, tendencia_milho):
         st.info("Recomendação automática: dados insuficientes para análise.")
-    elif tendencia_soja == tendencia_milho:
-        st.info(f"Recomendação automática: ambos em tendência de {tendencia_soja}. Avalie o mercado com cautela.")
     else:
         st.info("Recomendação automática: aguarde confirmação de mercado.")
